@@ -117,31 +117,32 @@ async def build(
         if fetch.returncode != 0:
             app.note(f"git fetch failed: {fetch.stderr.strip()}", tags=["build", "clone", "error"])
 
-        # Force-checkout default branch (handles dirty working tree from crashed builds)
+        # NOTE(v2p-hardening): Safe checkout without destructive reset or reclone.
+        # We create a fresh worktree-based build branch instead of touching the default branch.
+        # This prevents data loss if a prior build left the workspace in a dirty state.
+        checkout = subprocess.run(
+            ["git", "checkout", default_branch],
+            cwd=repo_path, capture_output=True, text=True,
+        )
+        if checkout.returncode != 0:
+            # Checkout failed — stash dirty state and retry (non-destructive)
+            subprocess.run(
+                ["git", "stash", "--include-untracked"],
+                cwd=repo_path, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ["git", "checkout", default_branch],
+                cwd=repo_path, capture_output=True, text=True,
+            )
+        # Pull latest without force-resetting user code
         subprocess.run(
-            ["git", "checkout", "-f", default_branch],
+            ["git", "pull", "--ff-only", "origin", default_branch],
             cwd=repo_path, capture_output=True, text=True,
         )
-        reset = subprocess.run(
-            ["git", "reset", "--hard", f"origin/{default_branch}"],
-            cwd=repo_path, capture_output=True, text=True,
+        app.note(
+            f"Safe checkout complete: {repo_path} on {default_branch}",
+            tags=["build", "clone", "checkout"],
         )
-        if reset.returncode != 0:
-            # Hard reset failed — nuke and re-clone as last resort
-            app.note(
-                f"Reset to origin/{default_branch} failed — re-cloning",
-                tags=["build", "clone", "reclone"],
-            )
-            import shutil
-            shutil.rmtree(repo_path, ignore_errors=True)
-            os.makedirs(repo_path, exist_ok=True)
-            clone_result = subprocess.run(
-                ["git", "clone", cfg.repo_url, repo_path],
-                capture_output=True, text=True,
-            )
-            if clone_result.returncode != 0:
-                err = clone_result.stderr.strip()
-                raise RuntimeError(f"git re-clone failed: {err}")
     else:
         # Ensure repo_path exists even when no repo_url is provided (fresh init case)
         # This is needed because planning agents may need to read the repo in parallel with git_init
@@ -591,16 +592,19 @@ async def plan(
                 ai_provider=ai_provider,
             ), "run_architect (revision)")
 
-    # Force-approve if we exhausted iterations
+    # NOTE(v2p-hardening): Fail-closed — do NOT auto-approve after max iterations.
+    # If the tech lead exhausted reviews without approval, escalate instead of silently approving.
     assert review is not None
     if not review["approved"]:
-        review = ReviewResult(
-            approved=True,
-            feedback=review["feedback"],
-            scope_issues=review.get("scope_issues", []),
-            complexity_assessment=review.get("complexity_assessment", "appropriate"),
-            summary=review["summary"] + " [auto-approved after max iterations]",
-        ).model_dump()
+        app.note(
+            f"Tech Lead exhausted max review iterations without approval — escalating to build failure",
+            tags=["pipeline", "tech_lead", "escalate"],
+        )
+        raise RuntimeError(
+            f"Architecture review failed after {max_review_iterations} iterations: "
+            f"{review.get('summary', 'No summary')}. "
+            "Review the architecture manually or increase max_review_iterations."
+        )
 
     # 4. Sprint planner decomposes into issues
     app.note("Phase 4: Sprint Planner", tags=["pipeline", "sprint_planner"])

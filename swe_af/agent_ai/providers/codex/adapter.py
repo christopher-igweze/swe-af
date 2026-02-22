@@ -31,7 +31,8 @@ def build_codex_command(
         "--json",
         "-c",
         "mcp_servers.figma.enabled=false",
-        "--dangerously-bypass-approvals-and-sandbox",
+        # NOTE(v2p-hardening): Sandbox bypass removed — enforce sandboxed execution.
+        # "--dangerously-bypass-approvals-and-sandbox",  # REMOVED: unsafe for production
         "-C",
         cwd,
         "--skip-git-repo-check",
