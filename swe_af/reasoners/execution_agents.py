@@ -65,6 +65,8 @@ from swe_af.prompts.workspace import CLEANUP_SYSTEM_PROMPT as WORKSPACE_CLEANUP_
 from swe_af.prompts.workspace import SETUP_SYSTEM_PROMPT as WORKSPACE_SETUP_SYSTEM_PROMPT
 from swe_af.prompts.workspace import workspace_cleanup_task_prompt, workspace_setup_task_prompt
 
+from swe_af.execution.cost_tracker import _track_cost
+
 from . import router
 
 
@@ -145,6 +147,7 @@ async def run_retry_advisor(
             output_schema=RetryAdvice,
             log_file=log_path,
         )
+        _track_cost("retry_advisor", response)
         if response.parsed is not None:
             router.note(
                 f"Retry advisor: should_retry={response.parsed.should_retry}, "
@@ -227,6 +230,7 @@ async def run_issue_advisor(
             output_schema=IssueAdvisorDecision,
             log_file=log_path,
         )
+        _track_cost("issue_advisor", response)
         if response.parsed is not None:
             router.note(
                 f"Issue advisor decision: {response.parsed.action.value} — {response.parsed.summary}",
@@ -307,6 +311,7 @@ async def run_replanner(
                 output_schema=ReplanDecision,
                 log_file=log_path,
             )
+            _track_cost("replanner", response)
             # Log raw response for debugging (even on parse failure)
             if log_dir:
                 raw_log = os.path.join(log_dir, f"replanner_{state.replan_count}_raw_{attempt}.txt")
@@ -419,6 +424,7 @@ async def run_issue_writer(
             output_schema=IssueWriterOutput,
             log_file=log_path,
         )
+        _track_cost("issue_writer", response)
         if response.parsed is not None:
             router.note(
                 f"Issue writer complete for {issue_name}: {response.parsed.issue_file_path}",
@@ -484,6 +490,7 @@ async def run_verifier(
             output_schema=VerificationResult,
             log_file=log_path,
         )
+        _track_cost("verifier", response)
         if response.parsed is not None:
             router.note(
                 f"Verifier complete: passed={response.parsed.passed}, "
@@ -570,6 +577,7 @@ async def run_git_init(
             output_schema=GitInitResult,
             log_file=log_path,
         )
+        _track_cost("git_init", response)
         if response.parsed is not None:
             router.note(
                 f"Git init complete: mode={response.parsed.mode}, "
@@ -648,6 +656,7 @@ async def run_workspace_setup(
             output_schema=WorkspaceSetupResult,
             log_file=log_path,
         )
+        _track_cost("workspace_setup", response)
         if response.parsed is not None:
             router.note(
                 f"Workspace setup complete: {len(response.parsed.workspaces)} worktrees created",
@@ -715,6 +724,7 @@ async def run_merger(
             output_schema=MergeResult,
             log_file=log_path,
         )
+        _track_cost("merger", response)
         if response.parsed is not None:
             router.note(
                 f"Merger complete: merged={response.parsed.merged_branches}, "
@@ -789,6 +799,7 @@ async def run_integration_tester(
             output_schema=IntegrationTestResult,
             log_file=log_path,
         )
+        _track_cost("integration_tester", response)
         if response.parsed is not None:
             router.note(
                 f"Integration tester complete: passed={response.parsed.passed}, "
@@ -860,6 +871,7 @@ async def run_workspace_cleanup(
             output_schema=WorkspaceCleanupResult,
             log_file=log_path,
         )
+        _track_cost("workspace_cleanup", response)
         if response.parsed is not None:
             router.note(
                 f"Workspace cleanup complete: {len(response.parsed.cleaned)} cleaned",
@@ -937,6 +949,7 @@ async def run_coder(
             output_schema=CoderResult,
             log_file=log_path,
         )
+        _track_cost("coder", response)
         if response.parsed is not None:
             router.note(
                 f"Coder complete: {issue_name}, "
@@ -1014,6 +1027,7 @@ async def run_qa(
             output_schema=QAResult,
             log_file=log_path,
         )
+        _track_cost("qa", response)
         if response.parsed is not None:
             router.note(
                 f"QA complete: {issue_name}, passed={response.parsed.passed}",
@@ -1091,6 +1105,7 @@ async def run_code_reviewer(
             output_schema=CodeReviewResult,
             log_file=log_path,
         )
+        _track_cost("code_reviewer", response)
         if response.parsed is not None:
             router.note(
                 f"Code reviewer complete: {issue_name}, "
@@ -1167,6 +1182,7 @@ async def run_qa_synthesizer(
             output_schema=QASynthesisResult,
             log_file=log_path,
         )
+        _track_cost("qa_synthesizer", response)
         if response.parsed is not None:
             router.note(
                 f"QA synthesizer complete: action={response.parsed.action.value}, "
@@ -1263,6 +1279,7 @@ async def generate_fix_issues(
             output_schema=FixGeneratorOutput,
             log_file=log_path,
         )
+        _track_cost("fix_generator", response)
         if response.parsed is not None:
             router.note(
                 f"Fix generator complete: {len(response.parsed.fix_issues)} fix issues, "
@@ -1332,6 +1349,7 @@ async def run_repo_finalize(
             output_schema=RepoFinalizeResult,
             log_file=log_path,
         )
+        _track_cost("repo_finalize", response)
         if response.parsed is not None:
             router.note(
                 f"Repo finalize complete: {len(response.parsed.files_removed)} files removed, "
@@ -1408,6 +1426,7 @@ async def run_github_pr(
             output_schema=GitHubPRResult,
             log_file=log_path,
         )
+        _track_cost("github_pr", response)
         if response.parsed is not None:
             router.note(
                 f"GitHub PR complete: {response.parsed.pr_url}",
