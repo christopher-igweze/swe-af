@@ -104,8 +104,10 @@ def _track_cost(agent_name: str, response: object) -> None:
         tracker = _current_cost_tracker.get(None)
         if tracker and response and hasattr(response, "metrics") and response.metrics:
             cost = response.metrics.total_cost_usd or 0
-            tokens = (response.metrics.input_tokens or 0) + (
-                response.metrics.output_tokens or 0
+            # Metrics stores token counts in the usage dict, not as direct attributes
+            usage = response.metrics.usage or {}
+            tokens = (usage.get("input_tokens", 0) or 0) + (
+                usage.get("output_tokens", 0) or 0
             )
             if cost > 0:
                 tracker.record_sync(agent_name, cost, tokens)

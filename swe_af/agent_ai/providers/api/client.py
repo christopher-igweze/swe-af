@@ -293,7 +293,7 @@ class APIProviderClient:
 
         for attempt in range(effective_retries + 1):
             try:
-                response = await self._execute(
+                response, tracked_files = await self._execute(
                     prompt=final_prompt,
                     model=effective_model,
                     cwd=effective_cwd,
@@ -312,6 +312,7 @@ class APIProviderClient:
                         )
                     return response
 
+                # Try reading the structured output file the LLM was asked to write
                 parsed = _read_and_parse_json_file(output_path, output_schema)
                 if parsed is not None:
                     resp = AgentResponse(
@@ -330,26 +331,29 @@ class APIProviderClient:
                         )
                     return resp
 
-                # Schema file not found or parse failed — try constructing from tracked data
-                # The tool loop tracks files_changed internally; use that to build a valid schema
+                # Schema file not found or parse failed — construct from tracked tool data.
+                # This is the common path for the API provider since LLMs often use tools
+                # but don't write the structured JSON output file.
                 fallback_parsed = None
-                if output_schema:
-                    try:
-                        # Extract files_changed from the response text or default to empty
-                        fallback_data = {
-                            "files_changed": [],
-                            "summary": (response.result or "")[:500],
-                            "complete": True,
-                        }
-                        # Check if _execute tracked any file writes via its internal state
-                        if hasattr(response, "_files_changed") and response._files_changed:
-                            fallback_data["files_changed"] = sorted(response._files_changed)
-                        fallback_parsed = output_schema.model_validate(fallback_data)
-                    except Exception:
-                        pass
+                try:
+                    # Filter out internal schema output files from tracked changes
+                    real_files = [f for f in tracked_files if ".api_output_" not in f]
+                    fallback_data = {
+                        "files_changed": real_files,
+                        "summary": (response.result or "")[:500],
+                        "complete": True,
+                    }
+                    fallback_parsed = output_schema.model_validate(fallback_data)
+                except Exception:
+                    pass
 
                 if log_fh:
-                    _write_log(log_fh, "end", is_error=fallback_parsed is None, reason="schema file fallback")
+                    _write_log(
+                        log_fh, "end",
+                        is_error=fallback_parsed is None,
+                        reason="schema_fallback_from_tracked_files",
+                        tracked_files=tracked_files,
+                    )
                 return AgentResponse(
                     result=response.result,
                     parsed=fallback_parsed,
@@ -386,8 +390,13 @@ class APIProviderClient:
         max_turns: int,
         system_prompt: str | None,
         log_fh: IO[str] | None = None,
-    ) -> AgentResponse[Any]:
-        """Execute a single tool-use loop against OpenRouter."""
+    ) -> tuple[AgentResponse[Any], list[str]]:
+        """Execute a single tool-use loop against OpenRouter.
+
+        Returns (response, files_changed) — files_changed tracks all write_file
+        and done tool calls so the caller can build a CoderResult even when the
+        LLM doesn't write the structured output file.
+        """
         start_time = time.time()
         api_key = self.config.env.get("OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
         if not api_key:
@@ -570,14 +579,12 @@ class APIProviderClient:
 
         resp = AgentResponse(
             result=final_text,
-            parsed=parsed_result,
+            parsed=None,
             messages=assistant_messages,
             metrics=metrics,
             is_error=False,
         )
-        # Attach tracked files for fallback schema construction in _run_with_retries
-        resp._files_changed = sorted(files_changed)  # type: ignore[attr-defined]
-        return resp
+        return resp, sorted(files_changed)
 
     @staticmethod
     def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
