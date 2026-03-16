@@ -74,4 +74,26 @@ def build_provider_client(config: "AgentAIConfig") -> ProviderClient:
         )
         return OpenCodeProviderClient(provider_cfg)
 
+    if config.provider == "api":
+        from swe_af.agent_ai.providers.api.client import (
+            APIProviderClient,
+            APIProviderConfig,
+        )
+
+        provider_cfg = APIProviderConfig(
+            model=config.model,
+            cwd=config.cwd,
+            max_turns=config.max_turns,
+            allowed_tools=list(config.allowed_tools),
+            system_prompt=config.system_prompt,
+            max_retries=config.max_retries,
+            initial_delay=config.initial_delay,
+            max_delay=config.max_delay,
+            backoff_factor=config.backoff_factor,
+            permission_mode=config.permission_mode,
+            max_budget_usd=config.max_budget_usd,
+            env=dict(config.env),
+        )
+        return APIProviderClient(provider_cfg)
+
     raise ValueError(f"Unsupported provider: {config.provider}")

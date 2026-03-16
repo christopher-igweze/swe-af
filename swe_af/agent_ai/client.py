@@ -25,7 +25,7 @@ DEFAULT_TOOLS: list[str] = [
 class AgentAIConfig:
     """Configuration for AgentAI."""
 
-    provider: Literal["claude", "codex", "opencode"] = "claude"
+    provider: Literal["claude", "codex", "opencode", "api"] = "claude"
     codex_bin: str = "codex"
     opencode_bin: str = "opencode"
     model: str = "sonnet"
