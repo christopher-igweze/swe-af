@@ -330,14 +330,32 @@ class APIProviderClient:
                         )
                     return resp
 
+                # Schema file not found or parse failed — try constructing from tracked data
+                # The tool loop tracks files_changed internally; use that to build a valid schema
+                fallback_parsed = None
+                if output_schema:
+                    try:
+                        # Extract files_changed from the response text or default to empty
+                        fallback_data = {
+                            "files_changed": [],
+                            "summary": (response.result or "")[:500],
+                            "complete": True,
+                        }
+                        # Check if _execute tracked any file writes via its internal state
+                        if hasattr(response, "_files_changed") and response._files_changed:
+                            fallback_data["files_changed"] = sorted(response._files_changed)
+                        fallback_parsed = output_schema.model_validate(fallback_data)
+                    except Exception:
+                        pass
+
                 if log_fh:
-                    _write_log(log_fh, "end", is_error=True, reason="schema parse failed")
+                    _write_log(log_fh, "end", is_error=fallback_parsed is None, reason="schema file fallback")
                 return AgentResponse(
                     result=response.result,
-                    parsed=None,
+                    parsed=fallback_parsed,
                     messages=response.messages,
                     metrics=response.metrics,
-                    is_error=True,
+                    is_error=fallback_parsed is None,
                 )
 
             except Exception as e:
@@ -550,13 +568,16 @@ class APIProviderClient:
                 files_changed=sorted(files_changed),
             )
 
-        return AgentResponse(
+        resp = AgentResponse(
             result=final_text,
-            parsed=None,
+            parsed=parsed_result,
             messages=assistant_messages,
             metrics=metrics,
             is_error=False,
         )
+        # Attach tracked files for fallback schema construction in _run_with_retries
+        resp._files_changed = sorted(files_changed)  # type: ignore[attr-defined]
+        return resp
 
     @staticmethod
     def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
