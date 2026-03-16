@@ -28,6 +28,8 @@ from swe_af.reasoners.schemas import (
     ReviewResult,
 )
 
+from swe_af.execution.cost_tracker import _track_cost
+
 from . import router
 
 
@@ -198,6 +200,7 @@ async def run_product_manager(
         output_schema=PRD,
         log_file=log_path,
     )
+    _track_cost("product_manager", response)
     if response.parsed is None:
         raise RuntimeError("Product manager failed to produce a valid PRD")
 
@@ -246,6 +249,7 @@ async def run_architect(
         output_schema=Architecture,
         log_file=log_path,
     )
+    _track_cost("architect", response)
     if response.parsed is None:
         raise RuntimeError("Architect failed to produce a valid architecture")
 
@@ -291,6 +295,7 @@ async def run_tech_lead(
         output_schema=ReviewResult,
         log_file=log_path,
     )
+    _track_cost("tech_lead", response)
     if response.parsed is None:
         raise RuntimeError("Tech lead failed to produce a valid review")
 
@@ -352,6 +357,7 @@ async def run_sprint_planner(
         output_schema=SprintPlanOutput,
         log_file=log_path,
     )
+    _track_cost("sprint_planner", response)
     if response.parsed is None:
         raise RuntimeError("Sprint planner failed to produce valid issues")
 
