@@ -713,12 +713,33 @@ async def execute(
         resume: If True, attempt to resume from a checkpoint file.
     """
     import logging
+    import os
+    import subprocess as _sp
 
     from swe_af.execution.cost_tracker import BudgetExceeded, CostTracker, _current_cost_tracker
     from swe_af.execution.dag_executor import run_dag
     from swe_af.execution.schemas import ExecutionConfig
 
     logger = logging.getLogger(__name__)
+
+    # Auto-clone if repo_url provided and repo_path doesn't exist
+    repo_url = ""
+    if git_config and isinstance(git_config, dict):
+        repo_url = git_config.get("repo_url", "")
+    if not repo_url and isinstance(plan_result, dict):
+        repo_url = plan_result.get("repo_url", "")
+    if repo_url and not os.path.exists(os.path.join(repo_path, ".git")):
+        if not repo_path or repo_path.startswith("/Users/"):
+            # Derive server-side path from URL
+            repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+            repo_path = f"/workspaces/{repo_name}"
+        os.makedirs(repo_path, exist_ok=True)
+        git_dir = os.path.join(repo_path, ".git")
+        if not os.path.exists(git_dir):
+            logger.info("execute: cloning %s → %s", repo_url, repo_path)
+            clone = _sp.run(["git", "clone", repo_url, repo_path], capture_output=True, text=True)
+            if clone.returncode != 0:
+                logger.error("Clone failed: %s", clone.stderr)
 
     effective_config = dict(config) if config else {}
     exec_config = ExecutionConfig(**effective_config) if effective_config else ExecutionConfig()
