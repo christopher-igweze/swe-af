@@ -193,6 +193,9 @@ class DAGState(BaseModel):
     accumulated_debt: list[dict] = []
     adaptation_history: list[dict] = []
 
+    # --- Cost tracking ---
+    cost_summary: dict | None = None
+
 
 class GitInitResult(BaseModel):
     """Result of git initialization."""
@@ -516,6 +519,7 @@ class BuildConfig(BaseModel):
     max_advisor_invocations: int = 2
     enable_issue_advisor: bool = True
     enable_learning: bool = False  # Cross-issue shared memory (conventions, failure patterns, bug patterns)
+    max_cost_usd: float | None = None  # Budget cap for LLM costs (None = no limit)
 
     @model_validator(mode="before")
     @classmethod
@@ -555,6 +559,7 @@ class BuildConfig(BaseModel):
             "max_advisor_invocations": self.max_advisor_invocations,
             "enable_issue_advisor": self.enable_issue_advisor,
             "enable_learning": self.enable_learning,
+            "max_cost_usd": self.max_cost_usd,
         }
 
 
@@ -567,6 +572,7 @@ class BuildResult(BaseModel):
     success: bool
     summary: str
     pr_url: str = ""
+    cost_summary: dict | None = None
 
 
 class RepoFinalizeResult(BaseModel):
@@ -607,6 +613,7 @@ class ExecutionConfig(BaseModel):
     max_advisor_invocations: int = 2
     enable_issue_advisor: bool = True
     enable_learning: bool = False
+    max_cost_usd: float | None = None  # Budget cap for LLM costs (None = no limit)
 
     @model_validator(mode="before")
     @classmethod

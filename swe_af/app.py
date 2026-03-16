@@ -712,8 +712,13 @@ async def execute(
             branch-per-issue workflow when provided.
         resume: If True, attempt to resume from a checkpoint file.
     """
+    import logging
+
+    from swe_af.execution.cost_tracker import BudgetExceeded, CostTracker, _current_cost_tracker
     from swe_af.execution.dag_executor import run_dag
     from swe_af.execution.schemas import ExecutionConfig
+
+    logger = logging.getLogger(__name__)
 
     effective_config = dict(config) if config else {}
     exec_config = ExecutionConfig(**effective_config) if effective_config else ExecutionConfig()
@@ -730,19 +735,43 @@ async def execute(
         # Built-in coding loop — dag_executor will use call_fn + coding_loop
         execute_fn = None
 
-    state = await run_dag(
-        plan_result=plan_result,
-        repo_path=repo_path,
-        execute_fn=execute_fn,
-        config=exec_config,
-        note_fn=app.note,
-        call_fn=app.call,
-        node_id=NODE_ID,
-        git_config=git_config,
-        resume=resume,
-        build_id=build_id,
+    # --- Cost tracking ---
+    max_cost = exec_config.max_cost_usd or 0
+    artifacts_dir = plan_result.get("artifacts_dir", "")
+    tracker = CostTracker(
+        max_cost_usd=max_cost if max_cost > 0 else 50.0,
+        artifacts_dir=artifacts_dir,
     )
-    return state.model_dump()
+    token = _current_cost_tracker.set(tracker)
+
+    try:
+        state = await run_dag(
+            plan_result=plan_result,
+            repo_path=repo_path,
+            execute_fn=execute_fn,
+            config=exec_config,
+            note_fn=app.note,
+            call_fn=app.call,
+            node_id=NODE_ID,
+            git_config=git_config,
+            resume=resume,
+            build_id=build_id,
+        )
+    except BudgetExceeded as exc:
+        logger.warning("Build budget exceeded: %s", exc)
+        app.note(f"Budget exceeded: {exc}", tags=["execute", "budget", "exceeded"])
+        # Return partial state — run_dag may have updated DAGState in-place before the
+        # exception propagated out of an agent call.  Re-import to build a minimal state.
+        from swe_af.execution.schemas import DAGState
+
+        state = DAGState(repo_path=repo_path, artifacts_dir=artifacts_dir)
+    finally:
+        _current_cost_tracker.reset(token)
+
+    # Attach cost summary to execution result
+    result = state.model_dump()
+    result["cost_summary"] = tracker.summary()
+    return result
 
 
 @app.reasoner()
