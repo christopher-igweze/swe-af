@@ -331,7 +331,7 @@ class QASynthesisResult(BaseModel):
 # Model configuration: runtime + flat role map
 # ---------------------------------------------------------------------------
 
-RUNTIME_VALUES: tuple[str, str] = ("claude_code", "open_code")
+RUNTIME_VALUES: tuple[str, str, str] = ("claude_code", "open_code", "api")
 
 ROLE_TO_MODEL_FIELD: dict[str, str] = {
     "pm": "pm_model",
@@ -381,14 +381,20 @@ _RUNTIME_BASE_MODELS: dict[str, dict[str, str]] = {
     "open_code": {
         **{field: "minimax/minimax-m2.5" for field in ALL_MODEL_FIELDS},
     },
+    "api": {
+        **{field: "anthropic/claude-sonnet-4-20250514" for field in ALL_MODEL_FIELDS},
+        "qa_synthesizer_model": "anthropic/claude-haiku-4.5",
+    },
 }
 
 
-def _runtime_to_provider(runtime: str) -> Literal["claude", "opencode"]:
+def _runtime_to_provider(runtime: str) -> Literal["claude", "opencode", "api"]:
     if runtime == "claude_code":
         return "claude"
     if runtime == "open_code":
         return "opencode"
+    if runtime == "api":
+        return "api"
     raise ValueError(f"Unsupported runtime {runtime!r}. Valid runtimes: {', '.join(RUNTIME_VALUES)}")
 
 
@@ -496,7 +502,7 @@ class BuildConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    runtime: Literal["claude_code", "open_code"] = "claude_code"
+    runtime: Literal["claude_code", "open_code", "api"] = "claude_code"
     models: dict[str, str] | None = None
 
     max_review_iterations: int = 2
@@ -530,7 +536,7 @@ class BuildConfig(BaseModel):
         _validate_flat_models(self.models)
 
     @property
-    def ai_provider(self) -> Literal["claude", "opencode"]:
+    def ai_provider(self) -> Literal["claude", "opencode", "api"]:
         return _runtime_to_provider(self.runtime)
 
     def resolved_models(self) -> dict[str, str]:
@@ -598,7 +604,7 @@ class ExecutionConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    runtime: Literal["claude_code", "open_code"] = "claude_code"
+    runtime: Literal["claude_code", "open_code", "api"] = "claude_code"
     models: dict[str, str] | None = None
     _resolved_models: dict[str, str] = PrivateAttr(default_factory=dict)
 
@@ -631,7 +637,7 @@ class ExecutionConfig(BaseModel):
         return self._resolved_models[field_name]
 
     @property
-    def ai_provider(self) -> Literal["claude", "opencode"]:
+    def ai_provider(self) -> Literal["claude", "opencode", "api"]:
         return _runtime_to_provider(self.runtime)
 
     @property
