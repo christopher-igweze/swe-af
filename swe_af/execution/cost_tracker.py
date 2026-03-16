@@ -49,9 +49,9 @@ class CostTracker:
     def summary(self) -> dict:
         """Return a snapshot of cost tracking state."""
         return {
-            "total_cost_usd": round(self.total_cost_usd, 4),
+            "total_cost_usd": round(self.total_cost_usd, 6),
             "max_cost_usd": self.max_cost_usd,
-            "budget_remaining": round(max(0, self.max_cost_usd - self.total_cost_usd), 4),
+            "budget_remaining": round(max(0, self.max_cost_usd - self.total_cost_usd), 6),
             "budget_percent": (
                 round(self.total_cost_usd / self.max_cost_usd * 100, 1)
                 if self.max_cost_usd > 0
